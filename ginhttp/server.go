@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+	"github.com/uber/jaeger-client-go/zipkin"
 )
 
 const defaultComponentName = "net/http"
@@ -80,7 +81,13 @@ func Middleware(tr opentracing.Tracer, options ...MWOption) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		carrier := opentracing.HTTPHeadersCarrier(c.Request.Header)
-		ctx, _ := tr.Extract(opentracing.HTTPHeaders, carrier)
+		var ctx opentracing.SpanContext
+		if c.Request.Header.Get("X-B3-Spanid") != "" {
+			propagator := zipkin.NewZipkinB3HTTPHeaderPropagator()
+			ctx, _ = propagator.Extract(carrier)
+		} else {
+			ctx, _ = tr.Extract(opentracing.HTTPHeaders, carrier)
+		}
 		op := opts.opNameFunc(c.Request)
 		sp := tr.StartSpan(op, ext.RPCServerOption(ctx))
 		ext.HTTPMethod.Set(sp, c.Request.Method)
